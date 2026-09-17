@@ -40,6 +40,9 @@ import java.util.Optional;
  * @param type              the type the source stated; never null, empty when the source stated none
  * @param transformerConfig the notation configuration the source stated; never null, empty when none
  * @param constraints       the rule chain the source stated; never null, empty when the source stated none
+ * @param elementType       what a collection the source stated HOLDS: the element of a {@code seq}, the value of
+ *                          a {@code map}; never null, empty when nothing was stated
+ * @param keyType           what a {@code map}'s key must be; never null, empty when nothing was stated
  */
 public record SourceDeclaration(Optional<ConfigType> type, Optional<String> transformerConfig,
                                 Optional<String> constraints, Optional<ConfigType> elementType,

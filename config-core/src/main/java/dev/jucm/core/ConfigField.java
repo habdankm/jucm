@@ -53,6 +53,10 @@ import java.util.Optional;
  * @param transformer name of the transformation in the registry; if present it must not be blank
  * @param transformerConfig configuration of that transformation; only allowed together with
  *        {@code transformer}
+ * @param elementType what this field HOLDS when it is a collection: the element of a {@code seq}, the value of a
+ *        {@code map}; only allowed for those two types
+ * @param keyType what a {@code map}'s KEY must be; only allowed for {@code map} — a key is text in the model, so
+ *        the declaration says what that text must BE, and it is what orders keys BY VALUE
  * @since 1.0
  */
 public record ConfigField(
