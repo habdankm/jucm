@@ -1,0 +1,14 @@
+# Playground: this is the file the application reads from the WORKING DIRECTORY.
+#
+# Change the values, run again and watch `uri` recompute from `host` and `port`.
+#
+host: example.org
+port: 8080    # the rule from the code: 8080 or 443 only
+#
+# `uri` is computed here from `host`, `port` and `api` (interpolation in a value). Comment the last
+# line out to see the difference: `uri` then falls back to the model and comes out as
+# `layer.uri=COMPILED`, computed by the declaration `http://${host}:${port}/api`.
+#
+# uri: http://set.by.hand/api
+api: kaboom
+uri: https://${host}:${port}/${api}

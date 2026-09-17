@@ -1,0 +1,9 @@
+// config-casciian — the TUI adapter (Casciian). Depends on core, never the reverse.
+plugins {
+    id 'java-library'
+}
+
+dependencies {
+    api project(':config-core')
+    implementation 'io.github.crramirez:casciian:1.6.0'
+}

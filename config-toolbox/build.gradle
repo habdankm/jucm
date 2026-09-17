@@ -1,0 +1,24 @@
+// config-toolbox — the facade for APPLICATIONS. It gathers the adapters into one whole so an
+// application only writes a model declaration and one lambda. It is not an adapter itself: it
+// knows nothing about YAML, env, CLI or TUI beyond composing them.
+//
+// `api` on the core only: an application sees the model and the result and does NOT need to know
+// picocli or casciian — that is the whole difference from writing `main` by hand.
+plugins {
+    id 'java-library'
+}
+
+dependencies {
+    api project(':config-core')
+    implementation project(':config-yaml')
+    implementation project(':config-env')
+    implementation project(':config-picocli')
+    // `api`, not `implementation`: `Configurator` is part of the toolbox API (the TUI extension
+    // point), so an application must see it without declaring the TUI module separately.
+    api project(':config-casciian')
+    // Java requires a supertype on the COMPILE classpath to use a SUBCLASS — even when only the
+    // static method `TuiApplication` is called. Hence the toolbox needs casciian explicitly,
+    // although `config-casciian` does not leak it. The application still does NOT see it
+    // (`implementation` here): `uri-app` knows only `config-core` and `config-toolbox`.
+    implementation 'io.github.crramirez:casciian:1.6.0'
+}

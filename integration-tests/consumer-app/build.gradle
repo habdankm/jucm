@@ -1,0 +1,51 @@
+// consumer-app — a consumer application.
+//
+// DSL note: the specification shows `build.gradle.kts` in its tree, while we keep **Groovy** — like
+// the whole repository, so there is one tool and one set of tricks.
+//
+// The role of this module: to behave like a **normal JUCM user**. Therefore:
+//   - JUCM comes in as an ARTIFACT (`dev.jucm:config-core`), never as `project(':config-core')`,
+//   - there is no access here to implementation classes or to the library's source sets.
+plugins {
+    id 'application'
+}
+
+repositories {
+    // mavenLocal FIRST: our artifact, then Central
+    mavenLocal()
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'dev.jucm:config-core:1.0'
+}
+
+application {
+    mainClass = 'dev.jucm.consumer.ConsumerApp'
+}
+
+// The first build must not depend on somebody running publishToMavenLocal by hand.
+tasks.withType(JavaCompile).configureEach {
+    dependsOn ':config-core:publishToMavenLocal'
+}
+tasks.withType(Test).configureEach {
+    dependsOn ':config-core:publishToMavenLocal'
+}
+
+// Checked where it really hurts: the consumer must NOT need Vavr to compile. That is exactly the
+// class of problem caused by a dependency on a library's implementation detail.
+tasks.register('verifyNoVavrOnCompileClasspath') {
+    description = 'Checks that Vavr did not leak onto the consumer compile classpath.'
+    def cp = configurations.compileClasspath
+    doLast {
+        def leaks = cp.files.findAll { it.name.contains('vavr') }
+        if (!leaks.isEmpty()) {
+            throw new GradleException("Vavr leaked onto the consumer compile classpath: ${leaks*.name}")
+        }
+        println "ok: consumer compile classpath without Vavr (${cp.files.size()} artifacts)"
+    }
+}
+
+tasks.named('check') {
+    dependsOn 'verifyNoVavrOnCompileClasspath'
+}

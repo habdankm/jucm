@@ -1,0 +1,70 @@
+// Shared configuration for the JUCM modules. Groovy DSL, same as in aimenagerie, so both
+// projects share one tool and one set of techniques.
+//
+// Note: the root does NOT impose `java-library` on all modules. The GraalVM native build tools
+// build a **shared library** (jucm.so) whenever a module declares the `java-library` plugin —
+// and we want an executable file. That is why the module type is declared by the module itself.
+// Do NOT declare the `org.graalvm.buildtools.native` plugin here: JUCM libraries produce **JARs**,
+// not binaries — the native image is built by the consuming project (e.g. aimenagerie), where JUCM
+// is a dependency. Applied to a library module, the native plugin built us a shared library
+// (jucm.so) instead of an executable file.
+
+allprojects {
+    group = 'dev.jucm'
+    version = '1.0'
+}
+
+subprojects {
+    // Configure only once the module declares Java itself (java-library or application).
+    plugins.withId('java') {
+        java {
+            toolchain {
+                languageVersion = JavaLanguageVersion.of(25)
+            }
+        }
+
+        repositories {
+            mavenCentral()
+        }
+
+        tasks.withType(JavaCompile).configureEach {
+            options.encoding = 'UTF-8'
+            // -Xlint:all — so small warnings do not turn into debt.
+            options.compilerArgs += ['-Xlint:all', '-parameters']
+        }
+
+        tasks.withType(Test).configureEach {
+            useJUnitPlatform()
+            testLogging { events 'passed', 'failed', 'skipped' }
+        }
+
+        // The library publishes JARs: a consumer tests the ARTIFACT, not the project.
+        // integration-tests are excluded from publishing — they are not a library.
+        if (!project.path.startsWith(':integration-tests')) {
+            apply plugin: 'maven-publish'
+
+            publishing {
+                publications {
+                    mavenJava(MavenPublication) {
+                        from components.java
+                    }
+                }
+            }
+        }
+
+        dependencies {
+            // Test stack: JUnit 6 + AssertJ (JUnit 6 because the toolchain is JDK 25).
+            testImplementation 'org.junit.jupiter:junit-jupiter:6.1.3'
+            testImplementation 'org.assertj:assertj-core:3.27.7'
+            testRuntimeOnly 'org.junit.platform:junit-platform-launcher:6.1.3'
+        }
+
+        // The project version lands in a resource of every module — one source of truth: the build.
+        // The native binary reads it through dev.jucm.core.Version so `--version` cannot lie.
+        tasks.named('processResources') {
+            def props = [version: project.version.toString()]
+            inputs.properties(props)
+            filesMatching('version.properties') { expand(props) }
+        }
+    }
+}

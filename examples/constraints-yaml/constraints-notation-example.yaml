@@ -1,0 +1,87 @@
+# =============================================================================================
+# AN EXAMPLE OF constraints NOTATION IN YAML — a file to READ, not to run through an application.
+#
+# THERE IS ONE PLACE FOR IT:
+#   a marker sits in a comment ON THE SAME LINE as the value of a key: value pair.
+#
+# Two sections, each at most ONCE in a single comment, in any order:
+#   TCONF(<transformation configuration>)   — the same as ENV ___TCONF / CLI --x--tconf
+#   CONST(<chain of conditions>)            — the same as ENV ___CONST / CLI --x--const
+#
+# A section's payload ends at the FIRST unescaped `)`. Write a parenthesis in the payload as `\)`;
+# inside backticks (the body of a regex) `)` is free, so groups work:
+#   CONST(~`^(a|b)$`)      <- the `)` belongs to the expression, it does not close the section
+#
+# Outside the sections, any other text may stand in the same comment — it is ignored:
+#   retries: 3   # CONST(>=1&<=10) — three attempts is our operational minimum
+# =============================================================================================
+
+
+# ── 1. PLAIN VALUES: shape (in/c) and order (</>) ─────────────────────────────────────────────
+
+transport_protocol: https              # CONST(in[http,https])
+log_format: json                       # CONST(in[json,text] | ~`^debug`) — a different section order, prose alongside
+retries: 3                             # CONST(>=1&<=10) — two conditions, `&` BEFORE the second (it is what makes it AND)
+endpoint: https://api.openai.com        # CONST(~`^[a-z][a-z0-9+.\-]*://.*`) — works without a declaration in code ONLY because of this
+budget: 100                            # CONST(>0&<=1000|!=500) — evaluated LEFT TO RIGHT, no priority: ((>0 & <=1000) | !=500)
+
+# ── 2. TWO MARKERS ON ONE LINE: notation + rule ───────────────────────────────────────────────
+
+start_date: 2026-01-01 12:00:00        # TCONF(yyyy-MM-dd HH:mm:ss) CONST(<'2030-01-01T00:00:00Z') — order on a TIME
+deadline: 2026-12-31T23:59:59Z         # CONST(<'2030-01-01T00:00:00Z') TCONF(yyyy-MM-dd'T'HH:mm:ssX) — the order does NOT matter
+
+# ── 3. COLLECTION LITERALS: `=` / `!=` with a list or a map ───────────────────────────────────
+
+tags: [api, prod]                      # CONST(=[api,prod]) — equality with the WHOLE list; compared by canonical form
+limits: {cpu: 2, mem: 4}               # CONST(={cpu: 2, mem: 4}) — equality with the WHOLE map
+
+# ── 4. `duration` and `uri` HAVE NO ORDER — after the cast they are text ──────────────────────
+#     (`"10s" < "9s"` lexicographically, although 10 s > 9 s — that is why `<30s` is an error and `in[…]` is not)
+
+timeout: 30s                           # CONST(in[10s,30s,90m]) — choosing from a list IS correct
+cache: 90m                             # CONST(c[90m]) — and even "contains"
+
+# ── 5. COLLECTIONS: contains (c) and maps (keys/values) ───────────────────────────────────────
+
+features: [search, export, audit]      # CONST(c[search,audit]) — at least these; extra entries do not hurt
+scopes: [read, write]                  # CONST(!c[admin])
+server:                                # CONST(keys[host,port,tls]&values[...]) — a marker here counts when the field under `server` is declared `map`: then the mapping IS that value, as next to a list
+  host: example.org
+  port: 8080
+  tls: true
+  # WHERE A MARKER ON A MAP IS AN ERROR: under any other address a mapping is a set of ADDRESSES, so a marker
+  # next to it has no entry to attach to.
+  # WHERE A MARKER INSIDE A MAP IS AN ERROR: when the map IS the value of a field declared `map`, every pair in
+  # it is the content of that ONE value — there is no pair to stand on, exactly as inside a list element.
+  # Everywhere else (a map that is a set of ADDRESSES) each pair may have ITS OWN marker, because each pair is a
+  # separate key: value pair:
+  retries: 3                           # CONST(>=0&<=10)
+  note: legacy                          # TCONF(trim) — the field's own notation
+
+# ── 6. THESE ARE ERRORS — hence commented out. Each one means "a rule that DOES NOT WORK" ─────
+#
+# ERROR: the file header — there is no pair for the marker to belong to
+# # CONST(<2&>0)
+#
+# ERROR: a line of its own ABOVE a key (in the tree: a BLOCK on the KEY node)
+# # TCONF(yyyy-MM-dd HH:mm:ss)
+# start_date: 2026-01-01 12:00:00
+#
+# ERROR: a line of its own BETWEEN pairs — also a BLOCK, so it does not mean "a comment above myself"
+# port: 8080
+# # CONST(>9999)
+# host: example.org
+#
+# ERROR: a marker next to a LIST ELEMENT — notation and rules concern the WHOLE field value
+# hosts:
+#   - api.example.com   # TCONF(trim)
+#
+# ERROR: two sections OF THE SAME kind (max 1 TCONF + 1 CONST)
+# port: 8080    # CONST(>0) CONST(<65536)
+#
+# ERROR: an unclosed section
+# port: 8080    # CONST(>0&<1024
+#
+# NOT a PLACE error, but a MODEL error (the type does not match — `RULE_MISMATCH`):
+# port: 8080    # TCONF(yyyy-MM-dd)     <- a time notation on a number
+# port: 8080    # CONST(<'2030-01-01T00:00:00Z')   <- order on a time on a number

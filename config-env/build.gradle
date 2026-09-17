@@ -1,0 +1,8 @@
+// config-env — the environment variables source adapter. No external dependencies.
+plugins {
+    id 'java-library'
+}
+
+dependencies {
+    api project(':config-core')
+}

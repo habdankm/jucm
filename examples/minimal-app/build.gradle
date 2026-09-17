@@ -1,0 +1,39 @@
+// minimal-app — an EXAMPLE, not a test. It compiles in `check` (so that it does not rot), but it has
+// NO tests: its role is to show how much boilerplate can be taken off an application on JUCM.
+//
+// The application is a COMPACT SOURCE FILE (JEP 512): no package and no class declaration. The class
+// name comes from the file name, hence `MinimalApp`.
+plugins {
+    id 'application'
+}
+
+repositories {
+    mavenLocal()      // our artifacts first
+    mavenCentral()
+}
+
+dependencies {
+    // One dependency for the JUCM libraries — the toolbox collects the adapters together. The
+    // application does not know picocli or casciian and does not have to.
+    implementation 'dev.jucm:config-toolbox:1.0'
+}
+
+// The example consumes JUCM as EXTERNAL JARs from mavenLocal, exactly like `native-app` — it shows
+// the library in real use, not a project inside a project.
+def jucmModules = [':config-core', ':config-yaml', ':config-env', ':config-picocli',
+                   ':config-casciian', ':config-toolbox']
+def published = jucmModules.collect { "${it}:publishToMavenLocal" }
+
+tasks.withType(JavaCompile).configureEach { dependsOn published }
+tasks.withType(Test).configureEach { dependsOn published }
+
+application {
+    // The default class (a compact source file): the class name is the file name, without a package.
+    mainClass = 'MinimalApp'
+}
+
+// `tui` is interactive: without this Gradle gives an empty standardInput and the terminal would not
+// receive keystrokes.
+tasks.named('run') {
+    standardInput = System.in
+}

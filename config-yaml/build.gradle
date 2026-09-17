@@ -1,0 +1,14 @@
+// config-yaml — the YAML source adapter (snakeyaml-engine). Depends on core, never the reverse.
+//
+// `snakeyaml-engine`, not the classic `org.yaml:snakeyaml`: only the engine hands back COMMENTS
+// in the Node tree (`setParseComments`); the classic one drops them on every path. The engine
+// also lets us set the schema, so we parse with `FailsafeSchema` and `${…}` stays OUR syntax
+// instead of SnakeYAML env interpolation (`!ENV_VARIABLE`).
+plugins {
+    id 'java-library'
+}
+
+dependencies {
+    api project(':config-core')
+    implementation 'org.snakeyaml:snakeyaml-engine:2.9'
+}

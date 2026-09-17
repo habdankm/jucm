@@ -1,0 +1,10 @@
+// config-core — the model and the engine. It MUST NOT depend on parsers (SnakeYAML, picocli)
+// or on any UI. Every integration depends on core, never the other way round.
+plugins {
+    id 'java-library'
+}
+
+dependencies {
+    // Vavr in the implementation only — the public API is plain Java.
+    implementation 'io.vavr:vavr:1.0.1'
+}

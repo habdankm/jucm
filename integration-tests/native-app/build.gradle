@@ -1,0 +1,146 @@
+// native-app — a JUCM consumer for studying the BEHAVIOUR OF THE APPLICATION as a native image
+// (GraalVM) and on different platforms (Linux, macOS, Windows).
+//
+// The role of this module — different from `consumer-app`:
+//   - `consumer-app` walks through the API block by block (an example of use),
+//   - `native-app` is a SMALL, RUNNABLE application: it reads YAML + ENV + CLI, resolves the
+//     configuration with interpolation (`host`, `port` -> `uri`) and prints the result in a form fit
+//     for comparison.
+//
+// That is why, as an EXCEPTION to the rule "native only in the consumer's application project", the
+// native plugin sits HERE — because this IS the consumer's application project. The JUCM libraries
+// keep producing JARs.
+//
+// HOW TO BUILD THE BINARY (and why like this, rather than "with a vendored toolchain"):
+//
+//   ./gradlew :integration-tests:native-app:nativeCompile \
+//       -Porg.gradle.java.installations.paths=/path/to/graalvm
+//
+// Declaring `java { toolchain { vendor = GRAAL_VM } }` in THIS file breaks the CONFIGURATION of the
+// whole build ("no matching toolchain", BUILD FAILED in half a second) whenever Gradle cannot see a
+// GraalVM installation — and `local.properties` is NOT read by Gradle automatically (see the comment
+// in `settings.gradle`). The effect: a plain `./gradlew clean check` would stop working on a machine
+// without GraalVM, that is, the portability of the repository would be broken for the convenience of
+// one task. So the path is given by THE CALLER, and the plugin gets a launcher from that installation.
+// Without a path `nativeCompile` fails with "javaLauncher has no value" — and that is honest: a
+// missing tool, not missing configuration.
+plugins {
+    id 'application'
+    // `1.1.9` — native image WORKS with it.
+    id 'org.graalvm.buildtools.native' version '1.1.9'
+}
+
+repositories {
+    mavenLocal()      // our artifacts first
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'dev.jucm:config-core:1.0'
+    // ONE dependency on our libraries: the toolbox collects the adapters (yaml/env/picocli/casciian).
+    // The application does not know picocli or casciian and does not have to — that is the whole
+    // difference.
+    implementation 'dev.jucm:config-toolbox:1.0'
+    // casciian is declared by US, because we write our OWN widget (`.tui(view -> ...)`): the types
+    // `TLabel`/`TWidget` have to be on our classpath. That is the deliberate cost of extending the
+    // TUI — and the only reason for this line.
+    implementation 'io.github.crramirez:casciian:1.6.0'
+}
+
+// ── NATIVE: a recipe that really produces a binary ──────────────────────────────────────────────
+//
+//   `toolchainDetection = false` + an explicit `javaLauncher` ON THE BINARY (not on the task!) is a
+//   workaround for the bug native-build-tools#542: without it the plugin cannot establish the
+//   launcher and fails with "Cannot query the value of property 'javaLauncher' because it has no
+//   value available". `javaLauncher` cannot be set on the task — `BuildNativeImageTask` has no such
+//   property.
+//
+//   The launcher is a PROVIDER, so it resolves only when `nativeCompile` runs — that is why a plain
+//   `./gradlew clean check` works even where GraalVM is not visible.
+//   The vendor is pinned to GRAAL_VM, so that the plugin never gets a plain JDK 25.
+//
+//   Build: ./gradlew :integration-tests:native-app:nativeCompile \
+//               -Porg.gradle.java.installations.paths=/path/to/graalvm      (or GRAALVM_HOME)
+// The vendor is pinned ONLY when it is known where GraalVM is. Without that condition, pinning
+// `GRAAL_VM` can break NON-native tasks (`run`, or even the configuration) with "Selection failed"
+// when Gradle cannot see a GraalVM installation — that is, the command from the README stops working.
+// With the condition: `run` always works, and `nativeCompile` without an indicated GraalVM says
+// plainly that `native-image` is missing (a clear message instead of a mysterious toolchain choice).
+def graalvmGiven = providers.gradleProperty('org.gradle.java.installations.paths').isPresent()
+    || providers.environmentVariable('GRAALVM_HOME').isPresent()
+
+graalvmNative {
+    toolchainDetection = false
+    binaries {
+        main {
+            javaLauncher = javaToolchains.launcherFor {
+                languageVersion = JavaLanguageVersion.of(25)
+                if (graalvmGiven) {
+                    vendor = JvmVendorSpec.GRAAL_VM
+                }
+            }
+            imageName = 'uri-app'
+        }
+    }
+}
+
+// `tui` is an interactive application: without this Gradle gives an empty standardInput and the
+// terminal would see the end of input instead of keystrokes (ESC would have no way of getting there).
+tasks.named('run') {
+    standardInput = System.in
+}
+
+application {
+    // A PACKAGE, not the default class: in the integration tests we stay with the packaged form,
+    // because tests are easier that way (a test can import the class and call `run(...)` directly).
+    // The minimal form without boilerplate is shown by the separate `examples:minimal-app` module.
+    mainClass = 'dev.jucm.nativeapp.NativeApp'
+    // The binary name: short and without characters that cause trouble on Windows or macOS.
+    applicationName = 'uri-app'
+}
+
+// The library modules this project consumes AS EXTERNAL JARs from mavenLocal.
+// The first build cannot assume that somebody ran publishToMavenLocal by hand — and that concerns
+// EVERY task that reaches for those artifacts (compilation, tests, native, the Vavr verification:
+// a missing entry here ends in "Could not find dev.jucm:config-toolbox").
+def jucmModules = [':config-core', ':config-yaml', ':config-env', ':config-picocli',
+                   ':config-casciian', ':config-toolbox']
+def published = jucmModules.collect { "${it}:publishToMavenLocal" }
+
+tasks.withType(JavaCompile).configureEach { dependsOn published }
+tasks.withType(Test).configureEach { dependsOn published }
+
+// The runtime classpath as ONE string — for launching the application directly with `java -cp`.
+// The reason: `./gradlew run` starts the process from the DAEMON, so environment variables set for
+// the invocation do not reach the application — and without ENV the ENV layer cannot be compared
+// between the JVM and the binary.
+tasks.register('printRuntimeClasspath') {
+    group = 'verification'
+    description = 'Prints the runtime classpath (for comparing the JVM with the binary).'
+    doLast {
+        println sourceSets.main.runtimeClasspath.asPath
+    }
+}
+
+tasks.named('nativeCompile') {
+    dependsOn published
+}
+
+// The same check as in `consumer-app`: the library's IMPLEMENTATION dependencies must not leak onto
+// the consumer compile classpath. The fewer dependencies the easier: the app now has two.
+tasks.register('verifyNoVavrOnCompileClasspath') {
+    description = 'Checks that Vavr did not leak onto the consumer compile classpath.'
+    dependsOn published
+    def cp = configurations.compileClasspath
+    doLast {
+        def leaks = cp.files.findAll { it.name.contains('vavr') }
+        if (!leaks.isEmpty()) {
+            throw new GradleException("Vavr leaked onto the compile classpath: ${leaks*.name}")
+        }
+        println "ok: compile classpath without Vavr (${cp.files.size()} artifacts)"
+    }
+}
+
+tasks.named('check') {
+    dependsOn 'verifyNoVavrOnCompileClasspath'
+}

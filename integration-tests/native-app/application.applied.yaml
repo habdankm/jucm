@@ -1,0 +1,6 @@
+# Written by the JUCM configurator (`tui` action) — SESSION CHANGES ONLY.
+# The source file (application.yaml) stays untouched; the application reads it, and then applies this one on top.
+# Values are quoted because the type comes from the field declaration, not from the file.
+# Rules and notation travel as markers in a comment on the SAME LINE: `# CONST(<chain>)`,
+# `# TCONF(<notation>)` — the reader picks them up (the same grammar as in every other source).
+port: "443"

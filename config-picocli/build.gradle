@@ -1,0 +1,16 @@
+// config-picocli — the CLI adapter (picocli). It is a LIBRARY like the other modules: it
+// produces a JAR. The application is the user's application; the native image is built by it,
+// not by us.
+plugins {
+    id 'java-library'
+}
+
+dependencies {
+    api project(':config-core')
+    implementation project(':config-yaml')
+    implementation project(':config-env')
+    // `api`, not `implementation`: `CliSpec.of(...)` returns a `CommandSpec`, so the picocli type
+    // is part of the module's public API — the application assembles `CommandLine` itself.
+    api 'info.picocli:picocli:4.7.7'
+    // no picocli-codegen: the spec is built programmatically, so there are no annotations to process
+}

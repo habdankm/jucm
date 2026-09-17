@@ -1,0 +1,33 @@
+// JUCM — project name and modules.
+//
+// Machine-specific settings (paths to the JDK/GraalVM, proxy) do not belong in the repository.
+// Provide them through local.properties (git-ignored), GRAALVM_HOME/JAVA_HOME, or -D on the
+// Gradle command line — see the comment in gradle.properties.
+// Note: the native image is built by the CONSUMER project, not by this repository — which is
+// why there is no native script and no GraalVM plugin here, and there will not be one.
+//
+// Warning for future maintainers: reading local.properties here and setting
+// installations.paths through System.setProperty does NOT work — Gradle resolves toolchains
+// before the settings script runs.
+rootProject.name = 'JUCM'
+
+include 'config-core',
+        'config-yaml',
+        'config-env',
+        'config-picocli',
+        'config-casciian',
+        'config-toolbox'
+
+// Consumer application for integration tests — a separate module that uses JUCM as an EXTERNAL
+// JAR from mavenLocal, not as a `project(...)` dependency.
+// It is an EXAMPLE OF A MINIMAL APPLICATION, not a test, but it IS COMPILED in `check` so it
+// cannot rot. It shows how much boilerplate can be dropped (compact file, instance main,
+// no `public final`).
+include 'examples:minimal-app'
+
+include 'integration-tests:consumer-app'
+
+// Small application for probing behaviour in the native image variant and on different platforms
+// (Linux/macOS/Windows). This IS a consumer application project, so it is the only place allowed
+// to apply the native plugin — JUCM libraries produce JARs and nothing more.
+include 'integration-tests:native-app'
