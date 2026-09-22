@@ -42,6 +42,11 @@ tasks.register('serviceE2E', JavaExec) {
     systemProperty 'serviceApp.java', "${System.getProperty('java.home')}/bin/java"
     systemProperty 'serviceApp.classpath', sourceSets.main.runtimeClasspath.asPath
     systemProperty 'serviceApp.runningMark', layout.buildDirectory.file('jucm-service-running').get().asFile
+    // The machine under the test is named on purpose: absent -PallowHost the task would refuse, which is the
+    // point. Experiments belong in the VM harness, not in somebody's session.
+    if (project.hasProperty('allowHost')) {
+        systemProperty 'service.e2e.target', 'host'
+    }
     systemProperty 'serviceApp.stoppedMark', layout.buildDirectory.file('jucm-service-stopped').get().asFile
     outputs.upToDateWhen { false }
 }

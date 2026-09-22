@@ -29,6 +29,19 @@ public final class ServiceE2E {
         Files.deleteIfExists(running);
         Files.deleteIfExists(stopped);
 
+        // NEVER the machine this runs on, unless somebody says so in as many words. Registering a service is a
+        // change to someone's system, and the whole reason the VM harness exists (entry 17 of maswerk_integrations)
+        // is to keep experiments away from it. Absent explicit permission, this refuses and says where to go.
+        if (!"host".equals(System.getProperty("service.e2e.target", ""))) {
+            System.err.println("REFUSED: this test registers a real service on the machine it runs on, and it was"
+                    + " not pointed at a disposable target. Nothing was changed.");
+            System.err.println("  a VM:  entry 17 of maswerk_integrations (the place experiments belong)");
+            System.err.println("  this machine, deliberately: ./gradlew :integration-tests:service-app:serviceE2E"
+                    + " -PallowHost=yes");
+            System.exit(2);
+        }
+        System.out.println("target: THIS machine, allowed explicitly with -PallowHost=yes");
+
         ServiceRegistrar registrar = ServiceRegistrars.current();
         System.out.println("mechanism: " + registrar);
 
