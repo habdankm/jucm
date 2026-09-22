@@ -1,32 +1,41 @@
-# service-app - JUCM as a service, and the end-to-end test over it
+# service-app - JUCM as a service, as ONE native binary
 
-JUCM has no service of its own to offer. What it can do is **pretend to be one**, so that the service registration
-library (JUSL, in ../jusm) has something real to register, start, ask about and stop - on a real machine, with a
-real service manager, not a mock.
+JUCM has no service of its own. What it can do is pretend to be one, so that the service registration library
+(JUSL, in ../jusm) has something real to register - and this module delivers that as a **single binary with
+nothing behind it**: no JVM, no jars, no runtime to install.
 
-    JucmService   shape exactly as ../maswerk/multi_oss.md asks for: start() / shutdown() / awaitTermination()
-                  hovers on a latch, not on a sleep loop - a sleeping loop is a loop that still wakes up
-                  stops on SIGTERM through a shutdown hook, which is how systemd stops a service on Linux
-                  leaves two MARKS: one on the way up, one when the stop method really ran
-    ServiceE2E    registers the service through JUSL, exercises it, and cleans up even when something fails
+    jusl-service                 hover as the service (systemd stops it with SIGTERM)
+    jusl-service install         register this very binary as a service
+    jusl-service reinstall       replace the registration
+    jusl-service remove          unregister
+    jusl-service status          what the service manager says, and what our marks say
+    jusl-service cycle           install, start, check, stop, remove - the whole thing in one command
 
-Run it:
+## Why one binary, and not a JVM plus jars
 
-    ./gradlew :integration-tests:service-app:serviceE2E
+Because that is the product's shape, not a convenience: the binary is its own installer. It knows its own path
+from the running process, so it can register ITSELF - which is only possible because the registration logic is
+linked in, not standing next to a JVM that the target machine would have to have.
 
-## Why two witnesses for every claim
+    build:   ./gradlew :integration-tests:service-app:nativeCompile \
+                 -Porg.gradle.java.installations.paths=/path/to/graalvm
+    binary:  build/native/nativeCompile/jusl-service
 
-Because they fail differently, and one can be true while the other is false:
+## Two witnesses for every claim
 
-    systemd says      isInstalled / isRunning - what the SERVICE MANAGER believes
-    the marks say     our code reached start() and reached shutdown() - what OUR PROCESS really did
-    what is left      after remove, nothing is registered, and the stop mark is still on disk
+The cycle asserts on two things that fail differently, and one can be true while the other is false:
 
-A service manager reporting "active" while the process died on the first line is exactly the case this test is
-built to catch, and it is why "the domain is running" is never accepted as evidence anywhere in this entry line.
+    the manager says   isInstalled / isRunning - what systemd believes
+    the marks say      our process reached the run path, and its stop path really ran
+    what is left       after remove: nothing registered, and no stale failure in the manager
 
-## The one thing this test does NOT do
+A service manager reporting "active" about a process that died on the first line is exactly what this catches,
+which is why "the machine is up" is never accepted as evidence anywhere in this line of work.
 
-It does not run in a virtual machine. It runs HERE, as a per-user service, because that is what JUSL's Linux
-backend supports and what this machine can prove. The VM harness for Windows is entry 17 in
-maswerk_integrations; this module is the payload it will carry, unchanged.
+## Where it is tested, and where it is NOT
+
+In a guest. Not on the machine this repository is developed on: registering a service is a change to somebody's
+system, and the whole reason the VM harness exists (entry 17 of maswerk_integrations) is to keep experiments out
+of it. `-PallowHost=yes` is the deliberate, spoken exception - and nothing else.
+
+The host builds the binary. The guest runs it, and has no Java at all.

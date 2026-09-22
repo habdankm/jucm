@@ -1,52 +1,70 @@
-// JUCM pretending to be a service, so that the service registration library has something real to register.
+// service-app - JUCM pretending to be a service, delivered as ONE NATIVE BINARY.
 //
-// This module IS a consumer application, so it is allowed to have entry points and a run task - the same rule the
-// native-app module follows. JUSL arrives from its own repository through the composite build in settings.gradle.
+// Zero Java on the target. The binary carries JUCM (its configuration) and JUSL (the service registration) inside
+// itself, which is the only reason it can be carried into a guest as a single file and register ITSELF there.
+//
+// The native recipe is copied from ../native-app, deliberately and with its reasons intact: the workaround for
+// native-build-tools#542, and the rule that the GraalVM path comes from THE CALLER so that a machine without
+// GraalVM can still run a plain `check`.
+//
+// Build:  ./gradlew :integration-tests:service-app:nativeCompile \
+//             -Porg.gradle.java.installations.paths=/path/to/graalvm     (or GRAALVM_HOME)
 
 plugins {
     id 'application'
-}
-
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(25)
-    }
+    id 'org.graalvm.buildtools.native' version '1.1.9'
 }
 
 repositories {
-    mavenLocal()
+    mavenLocal()      // our artifacts first: JUCM and JUSL are both consumed as external jars
     mavenCentral()
 }
 
 dependencies {
+    // The registration library, from its own repository. It is NOT published anywhere else, and that is on purpose:
+    // a library offered to anyone is a promise, and this one is still being decided.
     implementation 'dev.jusl:service-lib:1.0'
-    // JUCM itself, as every consumer takes it: the external JAR from mavenLocal, not a project dependency.
-    implementation 'dev.jucm:config-toolbox:1.0'
     implementation 'dev.jucm:config-core:1.0'
+    implementation 'dev.jucm:config-toolbox:1.0'
 }
 
-// The service under test: it hovers until SIGTERM, which is how systemd stops a service.
-tasks.register('runService', JavaExec) {
-    group = 'verification'
-    description = 'Runs the JUCM service in the foreground, for looking at it by hand.'
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'dev.jucm.service.JucmService'
-}
+def graalvmGiven = providers.gradleProperty('org.gradle.java.installations.paths').isPresent()
+    || providers.environmentVariable('GRAALVM_HOME').isPresent()
 
-// The end-to-end test: registers that service for real, starts it, asks about it, stops it, removes it.
-tasks.register('serviceE2E', JavaExec) {
-    group = 'verification'
-    description = 'Registers JUCM as a real service on this machine through JUSL, exercises it, and cleans up.'
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'dev.jucm.service.ServiceE2E'
-    systemProperty 'serviceApp.java', "${System.getProperty('java.home')}/bin/java"
-    systemProperty 'serviceApp.classpath', sourceSets.main.runtimeClasspath.asPath
-    systemProperty 'serviceApp.runningMark', layout.buildDirectory.file('jucm-service-running').get().asFile
-    // The machine under the test is named on purpose: absent -PallowHost the task would refuse, which is the
-    // point. Experiments belong in the VM harness, not in somebody's session.
-    if (project.hasProperty('allowHost')) {
-        systemProperty 'service.e2e.target', 'host'
+graalvmNative {
+    toolchainDetection = false
+    binaries {
+        main {
+            javaLauncher = javaToolchains.launcherFor {
+                languageVersion = JavaLanguageVersion.of(25)
+                if (graalvmGiven) {
+                    vendor = JvmVendorSpec.GRAAL_VM
+                }
+            }
+            // The name somebody will type on a machine that has no JVM at all.
+            imageName = 'jusl-service'
+        }
     }
-    systemProperty 'serviceApp.stoppedMark', layout.buildDirectory.file('jucm-service-stopped').get().asFile
-    outputs.upToDateWhen { false }
 }
+
+application {
+    mainClass = 'dev.jucm.service.JuslService'
+    applicationName = 'jusl-service'
+}
+
+// The first build cannot assume somebody ran publishToMavenLocal in the sibling repository by hand, and "Could not
+// find dev.jusl:service-lib" says nothing about what to do. This says what to do.
+tasks.register('verifyJuslPublished') {
+    description = 'Fails with an instruction, not with a missing-artifact stack, when JUSL is not in mavenLocal.'
+    def where = new File(System.getProperty('user.home'), '.m2/repository/dev/jusl/service-lib/1.0')
+    doLast {
+        if (!where.isDirectory()) {
+            throw new GradleException("dev.jusl:service-lib:1.0 is not in mavenLocal.\n"
+                    + "  Publish it first:   (cd ../jusm && ./gradlew publishToMavenLocal)")
+        }
+        println "ok: JUSL found in mavenLocal"
+    }
+}
+
+tasks.withType(JavaCompile).configureEach { dependsOn 'verifyJuslPublished' }
+tasks.named('nativeCompile') { dependsOn 'verifyJuslPublished' }
