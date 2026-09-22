@@ -13,6 +13,11 @@ out/
 .idea/
 *.iml
 .vscode/
+# VS Code Java addon compiles into `bin/` next to each module — same explicit-path rule as above
+/bin/
+config-*/bin/
+examples/*/bin/
+integration-tests/*/bin/
 
 # machine paths (never put absolute paths into build outputs)
 local.properties

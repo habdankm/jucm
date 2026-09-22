@@ -31,3 +31,6 @@ include 'integration-tests:consumer-app'
 // (Linux/macOS/Windows). This IS a consumer application project, so it is the only place allowed
 // to apply the native plugin — JUCM libraries produce JARs and nothing more.
 include 'integration-tests:native-app'
+
+
+include 'integration-tests:service-app'

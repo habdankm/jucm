@@ -1,0 +1,47 @@
+// JUCM pretending to be a service, so that the service registration library has something real to register.
+//
+// This module IS a consumer application, so it is allowed to have entry points and a run task - the same rule the
+// native-app module follows. JUSL arrives from its own repository through the composite build in settings.gradle.
+
+plugins {
+    id 'application'
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'dev.jusl:service-lib:1.0'
+    // JUCM itself, as every consumer takes it: the external JAR from mavenLocal, not a project dependency.
+    implementation 'dev.jucm:config-toolbox:1.0'
+    implementation 'dev.jucm:config-core:1.0'
+}
+
+// The service under test: it hovers until SIGTERM, which is how systemd stops a service.
+tasks.register('runService', JavaExec) {
+    group = 'verification'
+    description = 'Runs the JUCM service in the foreground, for looking at it by hand.'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.jucm.service.JucmService'
+}
+
+// The end-to-end test: registers that service for real, starts it, asks about it, stops it, removes it.
+tasks.register('serviceE2E', JavaExec) {
+    group = 'verification'
+    description = 'Registers JUCM as a real service on this machine through JUSL, exercises it, and cleans up.'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.jucm.service.ServiceE2E'
+    systemProperty 'serviceApp.java', "${System.getProperty('java.home')}/bin/java"
+    systemProperty 'serviceApp.classpath', sourceSets.main.runtimeClasspath.asPath
+    systemProperty 'serviceApp.runningMark', layout.buildDirectory.file('jucm-service-running').get().asFile
+    systemProperty 'serviceApp.stoppedMark', layout.buildDirectory.file('jucm-service-stopped').get().asFile
+    outputs.upToDateWhen { false }
+}
