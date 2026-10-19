@@ -50,6 +50,13 @@ printer is a leak.
 - Documented in `docs/` with the distinction: ENV-only secrets (nothing to mask) versus declared sensitive fields
   (masked at print).
 
+### What a host decides with it (recorded 19 X 2026)
+
+The flag is a DECLARATION BY THE HOST, per field, and JUCM must not decide it: maswerk marks its database
+PASSWORDS sensitive and deliberately does NOT mark `user`, because identity in a diagnostic line is worth more
+than a name hidden. Any future host may mark whichever field it likes; the library only guarantees that a marked
+field is masked wherever a value is printed.
+
 ### Not decided here
 
 Whether a sensitive field may also be WRITTEN back by a tool (`init`, an overlay exporter). If it may, the write
