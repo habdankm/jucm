@@ -49,6 +49,13 @@ public final class YamlDocument {
 
     private static final int INDENT = 2;
 
+    /**
+     * HOW MANY REPLACED VERSIONS ARE KEPT. A backup per change is what the owner asked for ("always, just in case"); an
+     * unbounded number of them turns a settings directory into an archive nobody prunes, so the newest ten stay and the rest
+     * go - newest ten is enough to undo a mistake made this week.
+     */
+    private static final int KEEP_BACKUPS = 10;
+
     /** The root mapping. A document whose root is not a mapping is refused: configuration is addresses, not a list. */
     private final MappingNode root;
 
@@ -197,7 +204,32 @@ public final class YamlDocument {
         } finally {
             Files.deleteIfExists(temporary);
         }
+        pruneBackups(file);
         return true;
+    }
+
+    /**
+     * Keeps the newest {@link #KEEP_BACKUPS} copies and deletes older ones. BEST EFFORT ON PURPOSE: a failed prune must never
+     * turn a successful write into an exception, because the file has already been changed and an operator reading "failed" would
+     * go looking for damage that is not there.
+     */
+    private static void pruneBackups(Path file) {
+        Path directory = file.toAbsolutePath().getParent();
+        if (directory == null) {
+            return;
+        }
+        String prefix = file.getFileName() + ".bak-";
+        try (var listing = Files.list(directory)) {
+            List<Path> backups = listing
+                .filter(path -> path.getFileName().toString().startsWith(prefix))
+                .sorted(java.util.Comparator.comparing((Path path) -> path.getFileName().toString()).reversed())
+                .toList();
+            for (Path older : backups.subList(Math.min(KEEP_BACKUPS, backups.size()), backups.size())) {
+                Files.deleteIfExists(older);
+            }
+        } catch (Exception ignored) {
+            // Said here rather than hidden: the copies that could not be pruned stay, which is the harmless direction.
+        }
     }
 
     // ── the tree, walked one address segment at a time ──────────────────────────────────────

@@ -99,6 +99,28 @@ class YamlDocumentTest {
     }
 
     @Test
+    @DisplayName("every change keeps a copy, and the copies do not grow without bound")
+    void each_change_is_backed_up_and_old_copies_are_pruned(@TempDir Path directory) throws Exception {
+        Path file = directory.resolve("maswerk.yaml");
+        Files.writeString(file, MASWERK_LIKE);
+
+        for (int change = 1; change <= 13; change++) {
+            YamlDocument document = YamlDocument.read(file);
+            document.putScalar("jdbc:h2:mem:v" + change, "jidl", "connections", "test");
+            assertThat(document.writeIfChanged(file)).isTrue();
+        }
+
+        List<Path> backups = Files.list(directory)
+            .filter(path -> path.getFileName().toString().contains(".bak-"))
+            .sorted()
+            .toList();
+        assertThat(backups).as("thirteen changes, the newest ten copies kept").hasSize(10);
+        // THE NEWEST COPY holds what the file said BEFORE the last change: v12, not v13.
+        Path newest = backups.get(backups.size() - 1);
+        assertThat(Files.readString(newest)).contains("jdbc:h2:mem:v12");
+    }
+
+    @Test
     @DisplayName("removing an entry that is not there is not an error - the caller wanted it gone")
     void removal_is_idempotent() {
         YamlDocument document = YamlDocument.parse("jidl:\n  connections:\n    dev: jdbc:h2:mem:x\n");
