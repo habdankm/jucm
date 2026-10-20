@@ -1,0 +1,11 @@
+// config-secrets — the encrypted store behind a field marked `sensitive`. Depends on core, never the reverse.
+//
+// AES-256-GCM with a key generated once per store and kept APART from the values: a password must not sit in `maswerk.yaml`, which is a file people
+// edit, copy and commit. The store knows nothing about which settings use it — the CONFIGURATION says that, with `sensitive`.
+plugins {
+    id 'java-library'
+}
+
+dependencies {
+    api project(':config-core')
+}

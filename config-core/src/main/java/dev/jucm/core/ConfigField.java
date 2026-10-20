@@ -368,6 +368,26 @@ public record ConfigField(
      * @param value metadata value
      * @return a copy carrying that entry
      */
+    /**
+     * MARKS THE FIELD AS CARRYING A SECRET (owner, 21 X 2026): a password, a token, anything a log must not print and a settings file must not keep in
+     * the clear.
+     *
+     * <p>IT IS METADATA, NOT A TYPE, and deliberately so: the declared type still says what the value IS (a string, a URI), while this says how it must
+     * be TREATED - hidden from a rendered configuration, refused from a plain file, available from a vault or the environment. A separate type would
+     * have forced every reader to know a second vocabulary for the same value.
+     *
+     * <p>WHAT READS IT: the renderers (to print `***` instead of the value) and the vault layer (to know which addresses it may supply). A field that
+     * is not marked is never taken from a vault, so a typo in a secret's name cannot silently fill some other setting.
+     */
+    public ConfigField sensitive() {
+        return withMetadata("sensitive", "true");
+    }
+
+    /** Whether this field carries a secret. See {@link #sensitive()}. */
+    public boolean isSensitive() {
+        return "true".equalsIgnoreCase(metadata.get("sensitive"));
+    }
+
     public ConfigField withMetadata(String key, String value) {
         java.util.Map<String, String> extended = new java.util.LinkedHashMap<>(metadata);
         extended.put(key, value);
