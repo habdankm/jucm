@@ -83,8 +83,15 @@ public final class YamlSource {
 
     private final String origin;
     private final String text;
+    /** Where relative `!include` paths resolve; null for text that came from nowhere (a flow literal, the ENV adapter). */
+    private final java.nio.file.Path baseDir;
 
     private YamlSource(String origin, String text) {
+        this(origin, text, (java.nio.file.Path) null);
+    }
+
+    private YamlSource(String origin, String text, java.nio.file.Path baseDir) {
+        this.baseDir = baseDir;
         this.origin = origin;
         this.text = text;
     }
@@ -113,7 +120,8 @@ public final class YamlSource {
      */
     public static ConfigResult<YamlSource> of(Path file) {
         try {
-            return ConfigResult.value(of(file.getFileName().toString(), Files.readString(file)));
+            return ConfigResult.value(new YamlSource(file.getFileName().toString(), Files.readString(file),
+                file.toAbsolutePath().getParent()));
         } catch (IOException missing) {
             return ConfigResult.error(new ConfigError.FileNotExist(FILE_PATH, source(file.toString()),
                 missing.getMessage() == null ? "the file could not be read" : missing.getMessage()));
@@ -183,6 +191,8 @@ public final class YamlSource {
             document = compose();
         } catch (MarkedYamlEngineException broken) {
             return ConfigResult.error(parseFailed(broken));
+        } catch (YamlProblem problem) {
+            return ConfigResult.error(problem.error);
         }
         if (document == null) {
             return ConfigResult.value(ConfigPatch.empty());
@@ -204,12 +214,22 @@ public final class YamlSource {
 
     // ── compose ──────────────────────────────────────────────────────────────────────────────
 
-    private Node compose() {
+    private Node compose() throws YamlProblem {
         LoadSettings settings = LoadSettings.builder()
             .setSchema(new FailsafeSchema())
             .setParseComments(true)
             .build();
-        return new Compose(settings).composeString(text).orElse(null);
+        Node root = new Compose(settings).composeString(text).orElse(null);
+        if (root == null || baseDir == null) {
+            return root;
+        }
+        try {
+            return Includes.splice(root, baseDir);
+        } catch (Includes.IncludeProblem broken) {
+            // A MISSING OR CYCLIC INCLUDE IS A PARSE-GRADE FAILURE: it is the file that cannot be read as written, and the reader must hear
+            // that in the same voice as a syntax error - with this file as the origin, and the include's own sentence inside.
+            throw new YamlProblem(new ConfigError.ParseFailed(source(origin), broken.getMessage()));
+        }
     }
 
     private ConfigError parseFailed(MarkedYamlEngineException broken) {
