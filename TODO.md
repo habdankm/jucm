@@ -61,3 +61,12 @@ field is masked wherever a value is printed.
 
 Whether a sensitive field may also be WRITTEN back by a tool (`init`, an overlay exporter). If it may, the write
 side needs the same rule, and that is a second decision rather than a detail of this one.
+
+---
+
+## The vault as a framework layer - DONE 21 X 2026 (JUCM 1.6)
+
+`config-toolbox` now owns the layer: an application declares a field `.sensitive()` and the store is read BETWEEN the file and the environment, with that
+position decided here rather than by each application. Opened only when the declaration has a sensitive field, so an application without secrets never
+gets a vault directory created under its feet. A vault that cannot be read stops the run with its own sentence. 4 tests: filled from the vault and
+reported as CUSTOM; ENV still wins; a password written in the FILE refused (and not printed); no sensitive field means no store touched.

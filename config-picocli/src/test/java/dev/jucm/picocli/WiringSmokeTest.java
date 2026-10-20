@@ -24,11 +24,13 @@ class WiringSmokeTest {
     void readsYamlEnvAndLayers() {
         String line = run("--yaml", "port: 8080", "--env", "PATH");
 
+        // THE VERSION IS PRINTED, not PINNED: this test is about the wiring, and a literal here breaks on every release bump (measured 21 X 2026, when
+        // 1.5 broke a test that expected 1.0). What matters is that the line carries a version at all.
         assertThat(line).startsWith("JUCM ")
+            .matches("JUCM \\d+\\.\\d+.*")
             .contains("yaml=port:8080")
             .contains("env=PATH:present")
-            .contains("layers=compiled > yaml > env")
-            .contains("1.0");
+            .contains("layers=compiled > yaml > env");
     }
 
     @Test
