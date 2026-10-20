@@ -234,6 +234,16 @@ public final class ConfigValidator {
                 "field `" + field.path().canonical() + "` has a value but no entry in the chain"));
             // Verdicts instead of re-validation: the value is already typed, and the problems were recorded
             // where they arose - in the step that stopped the value.
+            // A SECRET MUST NOT COME FROM A SETTINGS FILE (owner, 21 X 2026): the mark on the declaration says the value is a password, and a password in
+            // `maswerk.yaml` is a password in every copy, backup and commit of that file. The vault and the environment are the ways in.
+            if (field.isSensitive() && entry.source().layer() == Layer.YAML) {
+                // AND THE VALUE IS NOT CARRIED into the error: `actual` is what a renderer prints, so it holds a redaction - otherwise the check
+                // against leaks would be the thing that leaks.
+                errors.add(new ConfigError.ValidationFailed(field.path(),
+                    "sensitive: a secret cannot be set in a settings file - put it in the vault, or in the environment",
+                    ConfigString.of("***"), entry.source()));
+                continue;
+            }
             List<ConfigError> problems = entry.problems();
             if (!problems.isEmpty()) {
                 problems.forEach(problem -> addOnce(errors, problem));
