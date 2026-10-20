@@ -6,7 +6,7 @@ A handoff, not a summary: the README says what the engine is, `docs/lifecycle.md
 
 ## WHERE IT STANDS, MEASURED
 
-    version         1.0, group dev.jucm; every module applies maven-publish (build.gradle, line ~44)
+    version         **1.1** published 20 X 2026: the first release whose config-yaml carries `YamlDocument` (1.0 predates it)
     modules         config-core · config-yaml · config-env · config-picocli · config-casciian · config-toolbox
     yaml engine     org.snakeyaml:snakeyaml-engine:2.9 — the ENGINE, never classic snakeyaml, because only it hands back COMMENTS
     layering        defaults (code) < the YAML file < ENV < CLI
@@ -52,9 +52,8 @@ match - a file nobody asked to change is never rewritten.
    real work honestly: masking needs ONE door through which every human-facing value passes, and today there are four renderers.
    It becomes urgent the day a secret MUST live in a file.
 
-2. **A published artefact that contains `YamlDocument`.** The class is IN THE REPOSITORY and in NO released version: version 1.0
-   predates it. A consumer that wants to write its settings through it (maswerk) cannot, until a version is published. That is the
-   one dependency blocking the database-connection work in the neighbouring project.
+2. ~~A published artefact that contains `YamlDocument`.~~ DONE: 1.1 is published and maswerk takes `dev.jucm:config-yaml:1.1`;
+   it writes a database connection into its own settings file through it, with the comments intact and a `.bak` per change.
 
 3. **A test that a MAP OF SCALARS with dynamic keys is expressible end to end.** `ConfigField.map/optionalMap(path, keyType,
    valueType)` exists in `config-core`, so the schema side is there; what nobody has yet written is the test that a definition with
