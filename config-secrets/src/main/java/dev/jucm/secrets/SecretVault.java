@@ -40,11 +40,16 @@ public final class SecretVault {
     private static final int TAG_BITS = 128;
     private static final String CIPHER = "AES/GCM/NoPadding";
 
+    /** The file name used when the configuration names none. */
+    public static final String DEFAULT_FILE = "secrets.enc";
+
     private final Path directory;
+    private final Path values;
     private final SecretKeySpec key;
 
-    private SecretVault(Path directory, SecretKeySpec key) {
+    private SecretVault(Path directory, Path values, SecretKeySpec key) {
         this.directory = directory;
+        this.values = values;
         this.key = key;
     }
 
@@ -56,6 +61,18 @@ public final class SecretVault {
      * @throws SecretRefused when the directory or the key cannot be created or read
      */
     public static SecretVault open(Path directory) {
+        return open(directory, DEFAULT_FILE);
+    }
+
+    /**
+     * OPENS (or founds) a vault in a directory, with a named values FILE - because where a vault lives is configuration: one install may keep it
+     * beside its state, another on an encrypted volume, and a name hard-coded in this class would be a decision nobody could change.
+     *
+     * @param directory where the key and the values live
+     * @param fileName  the values file inside it, e.g. `secrets_vault.enc`
+     * @return the vault
+     */
+    public static SecretVault open(Path directory, String fileName) {
         try {
             Files.createDirectories(directory);
             Path keyFile = directory.resolve("vault.key");
@@ -75,7 +92,8 @@ public final class SecretVault {
                 Files.move(temporary, keyFile, StandardCopyOption.REPLACE_EXISTING);
                 restrict(keyFile);
             }
-            return new SecretVault(directory, new SecretKeySpec(material, "AES"));
+            return new SecretVault(directory, directory.resolve(fileName == null || fileName.isBlank() ? DEFAULT_FILE : fileName),
+                new SecretKeySpec(material, "AES"));
         } catch (SecretRefused refused) {
             throw refused;
         } catch (Exception broken) {
@@ -130,7 +148,12 @@ public final class SecretVault {
     // the file: names and encrypted values, one per line, written atomically and readable only by the owner
 
     private Path file() {
-        return directory.resolve("secrets.enc");
+        return values;
+    }
+
+    /** The values file this vault writes, for a message that has to name it. */
+    public Path filePath() {
+        return values;
     }
 
     private Map<String, String> readAllRaw() {

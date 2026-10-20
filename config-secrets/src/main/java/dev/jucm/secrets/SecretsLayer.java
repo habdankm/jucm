@@ -56,6 +56,6 @@ public final class SecretsLayer {
 
     /** Where the value came from, in the words a diagnostic shows a person: the vault file, never a bare "vault". */
     private ConfigSource sourceFor(ConfigPath path) {
-        return ConfigSource.of(Layer.CUSTOM, "vault:" + vault.directory().resolve("secrets.enc").getFileName() + ":" + path.canonical());
+        return ConfigSource.of(Layer.CUSTOM, "vault:" + vault.filePath().getFileName() + ":" + path.canonical());
     }
 }
