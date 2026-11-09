@@ -8,6 +8,7 @@ import dev.jucm.core.ConfigPatch;
 import dev.jucm.core.ConfigPath;
 import dev.jucm.core.ConfigPipeline;
 import dev.jucm.core.ConfigResult;
+import dev.jucm.core.ConfigSealed;
 import dev.jucm.core.ConfigSeq;
 import dev.jucm.core.ConfigSource;
 import dev.jucm.core.ConfigString;
@@ -73,6 +74,12 @@ public final class YamlSource {
 
     /** The key pre-parser runs only when the text has something to resolve. */
     private static final String CONTROL = "${";
+
+    /**
+     * THE TAG THAT CARRIES A SEALED VALUE: `!decrypt` over a mapping of `ciphertext` and `key`. It is read here, at the one place a node becomes a value, so
+     * every consumer gets a plain setting and the encryption never leaks into the model (owner, 31 X 2026).
+     */
+    private static final String DECRYPT_TAG = "!decrypt";
 
     /**
      * Technical paths under which the content of keys to resolve is placed. They are not
@@ -272,7 +279,9 @@ public final class YamlSource {
             }
             Node child = real(tuple.getValueNode());
             if (child instanceof MappingNode nested) {
-                if (takesMappingAsValue(definition, segments, tuple.getKeyNode())) {
+                // THE VALUE NODE, not the key: the tag `!decrypt` sits on the mapping, and asking the KEY's tag is what made the first version descend into it
+                // (measured 31 X 2026: `a.ciphertext` and `a.key` came back as two addresses).
+                if (takesMappingAsValue(definition, segments, tuple.getValueNode())) {
                     // A declaration stands under this address: the mapping is ONE value there, so the pairs
                     // inside it are the content of that value, not addresses. A marker inside them would be
                     // a rule that does NOT work (the content is not an entry) — hence loud.
@@ -314,6 +323,11 @@ public final class YamlSource {
      * A key OUTSIDE the schema has no declaration, so it keeps reading the mapping as addresses.
      */
     private boolean takesMappingAsValue(ConfigDefinition definition, List<String> segments, Node at) {
+        // `!decrypt` SAYS IT ITSELF (owner, 31 X 2026): the tag marks a mapping as ONE VALUE - `ciphertext` and `key` are its parts, not two addresses under
+        // the setting. Without this the walker descended into it and a password became `password.ciphertext` and `password.key`, a shape nobody wrote.
+        if (DECRYPT_TAG.equals(real(at).getTag().getValue())) {
+            return true;
+        }
         return addressOrNone(segments, at)
             .flatMap(definition::field)
             .isPresent();
@@ -334,6 +348,16 @@ public final class YamlSource {
     /** The value under an address: a scalar is text, a sequence is a `ConfigSeq`, a map a `ConfigMap`. */
     private ConfigValue value(Node node, Node position, Set<Node> branch) throws YamlProblem {
         Node real = real(node);
+        // `!decrypt` IS READ BEFORE ANYTHING ELSE, because it is the one node whose text is NOT its value (owner, 31 X 2026):
+        //
+        //     password: !decrypt
+        //       ciphertext: "<base64(nonce || ciphertext || tag)>"
+        //       key: "the key it was sealed with"
+        //
+        // The secret then sits EXACTLY where its setting is - the address a reader already knows - instead of in a second file nobody looks at.
+        if (DECRYPT_TAG.equals(real.getTag().getValue())) {
+            return decrypted(real, position);
+        }
         if (real instanceof ScalarNode scalar) {
             return ConfigString.of(scalar.getValue());
         }
@@ -357,6 +381,51 @@ public final class YamlSource {
         }
         throw new YamlProblem(new ConfigError.ParseFailed(source(line(position)),
             "a node of type " + real.getNodeType() + " is not a configuration value"));
+    }
+
+    /**
+     * OPENS ONE `!decrypt` NODE - a mapping of exactly `ciphertext` and `key`, where the ciphertext is `base64(nonce || ciphertext || tag)` produced by
+     * `dev.jucm.secrets.Sealed` (or by `SecretVault`, which uses the same construction).
+     *
+     * <p>WHY THE ERRORS ARE THIS NARROW: a value that will not open is either a wrong key or a text somebody changed, and neither is a parse problem a reader can
+     * solve by looking at the node's shape - so the sentence says what failed and never shows the value, its key, or a fragment of either.
+     *
+     * @param node     the tagged node
+     * @param position where it sits, for the sentence
+     * @return the plain value
+     * @throws YamlProblem when the node is not the shape the tag describes, or the value does not open
+     */
+    private ConfigValue decrypted(Node node, Node position) throws YamlProblem {
+        if (!(node instanceof MappingNode mapping)) {
+            throw failure(position, "`!decrypt` takes a mapping of `ciphertext` and `key`, and this node is a " + node.getNodeType());
+        }
+        String ciphertext = null;
+        String key = null;
+        for (NodeTuple tuple : mapping.getValue()) {
+            String name = keyText(tuple.getKeyNode());
+            Node held = real(tuple.getValueNode());
+            if (!(held instanceof ScalarNode scalar)) {
+                throw failure(position, "`!decrypt`'s `" + name + "` must be a scalar");
+            }
+            switch (name) {
+                case "ciphertext" -> ciphertext = scalar.getValue();
+                case "key" -> key = scalar.getValue();
+                default -> throw failure(position, "`!decrypt` knows `ciphertext` and `key`, not `" + name + "`");
+            }
+        }
+        if (ciphertext == null || ciphertext.isBlank()) {
+            throw failure(position, "`!decrypt` with no `ciphertext`: there is nothing to open");
+        }
+        if (key == null || key.isBlank()) {
+            throw failure(position, "`!decrypt` with no `key`: the `key` member is the key the value was sealed with");
+        }
+        // NOT OPENED HERE (owner, 31 X 2026): the key may be `${vault_key}`, and `${…}` is resolved AT THE READ against one snapshot. This node leaves the adapter as
+        // a SYMBOLIC value and `Config.get` opens it - see `ConfigSealed`.
+        return new ConfigSealed(ciphertext, key);
+    }
+
+    private YamlProblem failure(Node position, String sentence) {
+        return new YamlProblem(new ConfigError.ParseFailed(source(line(position)), sentence));
     }
 
     private String keyText(Node key) throws YamlProblem {

@@ -15,7 +15,7 @@ repositories {
 dependencies {
     // One dependency for the JUCM libraries — the toolbox collects the adapters together. The
     // application does not know picocli or casciian and does not have to.
-    implementation 'dev.jucm:config-toolbox:1.0'
+    implementation "dev.jucm:config-toolbox:${rootProject.version}"
 }
 
 // The example consumes JUCM as EXTERNAL JARs from mavenLocal, exactly like `native-app` — it shows

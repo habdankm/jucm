@@ -367,30 +367,9 @@ public final class ConfigTool {
             names.add(Layer.YAML);
         }
 
-        // 1b) THE VAULT — BETWEEN THE FILE AND THE ENVIRONMENT (owner, 21 X 2026), and this order is the framework's decision rather than each
-        // application's: a saved secret beats a hand-written file, while ENV still wins for CI and for a first boot where no vault exists yet.
-        //
-        // OPENED ONLY WHEN THE DECLARATION HAS A `sensitive` FIELD: an application without secrets gets no vault directory created under its feet,
-        // which is the difference between a feature and a side effect.
-        if (definition.fields().stream().anyMatch(dev.jucm.core.ConfigField::isSensitive)) {
-            dev.jucm.core.Config afterFile = Config.root(definition);
-            for (ConfigPatch layer : layers) {
-                afterFile = afterFile.apply(layer);
-            }
-            try {
-                dev.jucm.secrets.SecretVault vault = dev.jucm.secrets.SecretsSettings.from(afterFile).open();
-                ConfigPatch secrets = new dev.jucm.secrets.SecretsLayer(vault).patch(definition);
-                if (!secrets.operations().isEmpty()) {
-                    layers.add(secrets);
-                    names.add(Layer.CUSTOM);
-                }
-            } catch (RuntimeException broken) {
-                // A VAULT THAT CANNOT BE READ IS NOT AN EMPTY VAULT: the run stops with the store's own sentence instead of continuing with
-                // secrets that silently vanished.
-                return fail(err, new ConfigError.ParseFailed(dev.jucm.core.ConfigSource.of(Layer.CUSTOM, "vault"),
-                    broken.getMessage() == null ? broken.getClass().getSimpleName() : broken.getMessage()));
-            }
-        }
+        // 1b) THE SEPARATE VAULT IS GONE (owner, 1 XI 2026: „wywal stare śmieci”): a secret now travels INSIDE the configuration as `!decrypt` with its key, so there
+        // is no second store to open here, no key file beside it, and no layer that could disagree with the file. `secrets.*` and `SecretsLayer` were removed with
+        // it - a second mechanism beside the file is what the tag replaced.
 
         // 2) ENV — the structure reader is injected from the YAML adapter; source modules do not know each other
         if (envPrefix != null) {

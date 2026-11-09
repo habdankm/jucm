@@ -55,6 +55,25 @@ class IncludeTest {
   }
 
   @Test
+  @DisplayName("two files that both name `storage` KEEP each other's stores - the merge is deep, not a replacement")
+  void mappingsAreMergedDeep(@TempDir Path dir) throws IOException {
+    // Measured 1 XI 2026: `maswerk.yaml` named `maswerk_user.yaml`, both carried a `storage` mapping, and the shallow replace dropped the user's index store -
+    // a `multi` install started with three of its four stores and no message about the fourth beyond "there is nowhere to record work".
+    Files.writeString(dir.resolve("core.yaml"), "storage:\n  scheduler: {url: core}\n  queue: {url: core}\n");
+    Files.writeString(dir.resolve("user.yaml"), "storage:\n  index: {url: user}\n");
+    Files.writeString(dir.resolve("main.yaml"), "!include user.yaml:\n!include core.yaml:\n");
+
+    Config config = read(dir.resolve("main.yaml"),
+        ConfigField.optional("storage.scheduler.url", ConfigType.STR),
+        ConfigField.optional("storage.queue.url", ConfigType.STR),
+        ConfigField.optional("storage.index.url", ConfigType.STR));
+
+    assertThat(text(config, "storage.scheduler.url")).isEqualTo("core");
+    assertThat(text(config, "storage.queue.url")).isEqualTo("core");
+    assertThat(text(config, "storage.index.url")).isEqualTo("user");
+  }
+
+  @Test
   @DisplayName("a missing include is a PARSE-GRADE failure naming the file, not a crash")
   void missingIncludeIsReported(@TempDir Path dir) throws IOException {
     Files.writeString(dir.resolve("main.yaml"), "a: !include nowhere.yaml\n");

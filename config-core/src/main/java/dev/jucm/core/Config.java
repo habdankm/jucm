@@ -751,9 +751,56 @@ public final class Config {
     public ConfigResult<ConfigValue> get(ConfigPath path) {
         Objects.requireNonNull(path, "path");
         return switch (Interpolation.lookup(this, path)) {
-            case Interpolation.Outcome.Value value -> ConfigResult.value(value.value());
+            case Interpolation.Outcome.Value value -> opened(value.value(), path);
             case Interpolation.Outcome.YieldsAbsent ignored -> ConfigResult.error(new ConfigError.Absent(path));
             case Interpolation.Outcome.Problem problem -> ConfigResult.error(problem.error());
+        };
+    }
+
+    /**
+     * A SEALED VALUE OPENS HERE - AT THE READ, not at the parse (owner, 31 X 2026: „vault_key wsadzić też jako base64 do głównej konfiguracji. potem interpolować tę
+     * wartość w miejscach”). The `key` member may be `${vault_key}`, and `${…}` is resolved against ONE snapshot at read time; opening the value while parsing would
+     * freeze the key to the literal text and fail.
+     *
+     * @param value what the entry holds
+     * @param path  where it stands, for the sentence when it will not open
+     * @return the plain value, or the refusal
+     */
+    private ConfigResult<ConfigValue> opened(ConfigValue value, ConfigPath path) {
+        if (!(value instanceof ConfigSealed sealed)) {
+            return ConfigResult.value(value);
+        }
+        ConfigSource here = ConfigSource.of(Layer.CUSTOM, "decrypt:" + path.canonical());
+        try {
+            return ConfigResult.value(ConfigString.of(Sealed.open(sealed.ciphertext(), keyOf(sealed, path, here))));
+        } catch (IllegalArgumentException refused) {
+            return ConfigResult.error(new ConfigError.ParseFailed(here, refused.getMessage()));
+        }
+    }
+
+    /**
+     * THE KEY THE VALUE WAS SEALED WITH: a literal, or ONE `${…}` reference resolved against this snapshot.
+     *
+     * <p>A key made of several references (`"${a}-${b}"`) is REFUSED rather than quietly resolved: a secret whose key is assembled from several values has no single
+     * place a person can check, and a typo there would look like a wrong password.
+     */
+    private String keyOf(ConfigSealed sealed, ConfigPath path, ConfigSource source) {
+        String written = sealed.key();
+        if (!written.contains("${")) {
+            return written;
+        }
+        ConfigValue parsed = switch (Interpolation.parse(path, written, source)) {
+            case ConfigResult.ValueResult<ConfigValue> ok -> ok.value();
+            case ConfigResult.ErrorResult<ConfigValue> bad -> throw new IllegalArgumentException(bad.error().message());
+        };
+        if (!(parsed instanceof ConfigReference reference)) {
+            throw new IllegalArgumentException("the `!decrypt` key `" + written
+                + "` is not a single ${reference}: a key assembled from several values has no one place a person can check");
+        }
+        return switch (get(reference.target())) {
+            case ConfigResult.ValueResult<ConfigValue> found -> found.value() instanceof ConfigString text ? text.value() : found.value().display();
+            case ConfigResult.ErrorResult<ConfigValue> missing -> throw new IllegalArgumentException("the `!decrypt` key names `"
+                + reference.target().canonical() + "`, which this configuration does not carry: " + missing.error().message());
         };
     }
 

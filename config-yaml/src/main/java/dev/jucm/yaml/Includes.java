@@ -93,14 +93,33 @@ public final class Includes {
             if (isInclude(tuple.getKeyNode()) && isNull(tuple.getValueNode())) {
                 MappingNode included = includedMapping(pathOf(tuple.getKeyNode()), dir, chain);
                 for (NodeTuple fromIncluded : included.getValue()) {
-                    merged.put(keyText(fromIncluded.getKeyNode()), fromIncluded);
+                    String includedKey = keyText(fromIncluded.getKeyNode());
+                    NodeTuple already = merged.get(includedKey);
+                    if (already != null && already.getValueNode() instanceof MappingNode under
+                            && fromIncluded.getValueNode() instanceof MappingNode above) {
+                        // TWO INCLUDES THAT BOTH NAME `storage` MERGE TOO (the same rule as an included-versus-own collision): a document that splices two files
+                        // describing different stores must end up with both, not with the last one read.
+                        merged.put(includedKey, new NodeTuple(fromIncluded.getKeyNode(), mergeDeep(under, above)));
+                    } else {
+                        merged.put(includedKey, fromIncluded);
+                    }
                 }
             } else {
                 own.add(tuple);
             }
         }
         for (NodeTuple tuple : own) {
-            merged.put(keyText(tuple.getKeyNode()), tuple);
+            String key = keyText(tuple.getKeyNode());
+            NodeTuple fromIncluded = merged.get(key);
+            if (fromIncluded != null && fromIncluded.getValueNode() instanceof MappingNode base
+                    && tuple.getValueNode() instanceof MappingNode over) {
+                // DEEP MERGE WHEN BOTH SIDES ARE MAPPINGS (measured 1 XI 2026): two files that both spell `storage` describe DIFFERENT stores, and a shallow replace
+                // dropped the included half - a `multi` install whose core file named the user file could not open its index, because the core's `storage` mapping
+                // replaced the user's `storage.workspace_index` whole. On a true collision a leaf from the NAMING file still wins.
+                merged.put(key, new NodeTuple(tuple.getKeyNode(), mergeDeep(base, over)));
+                continue;
+            }
+            merged.put(key, tuple);
         }
 
         List<NodeTuple> resolved = new ArrayList<>();
@@ -111,6 +130,31 @@ public final class Includes {
             resolved.add(new NodeTuple(splice(tuple.getKeyNode(), dir, chain), value));
         }
         return new MappingNode(mapping.getTag(), resolved, mapping.getFlowStyle());
+    }
+
+    /**
+     * TWO MAPPINGS, ONE - the included one's keys first, the naming file's keys on top, and recursion where BOTH carry a mapping.
+     *
+     * @param base what the include brought
+     * @param over what the naming file says
+     * @return the merged mapping, with the naming file winning on any leaf it names
+     */
+    private static MappingNode mergeDeep(MappingNode base, MappingNode over) {
+        Map<String, NodeTuple> merged = new LinkedHashMap<>();
+        for (NodeTuple tuple : base.getValue()) {
+            merged.put(keyText(tuple.getKeyNode()), tuple);
+        }
+        for (NodeTuple tuple : over.getValue()) {
+            String key = keyText(tuple.getKeyNode());
+            NodeTuple existing = merged.get(key);
+            if (existing != null && existing.getValueNode() instanceof MappingNode under
+                    && tuple.getValueNode() instanceof MappingNode above) {
+                merged.put(key, new NodeTuple(tuple.getKeyNode(), mergeDeep(under, above)));
+            } else {
+                merged.put(key, tuple);
+            }
+        }
+        return new MappingNode(over.getTag(), new ArrayList<>(merged.values()), over.getFlowStyle());
     }
 
     private static Node includeAsValue(String path, Path dir, List<Path> chain) throws IncludeProblem {

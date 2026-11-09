@@ -8,7 +8,7 @@ package dev.jucm.core;
  */
 public sealed interface ConfigValue
     permits ConfigString, ConfigInt, ConfigFloat, ConfigBool, ConfigTimestamp,
-            ConfigSeq, ConfigMap, ConfigBinary, ConfigReference, ConfigExpression, ConfigCoalesce {
+            ConfigSeq, ConfigMap, ConfigBinary, ConfigReference, ConfigExpression, ConfigCoalesce, ConfigSealed {
 
     /**
      * Returns the type of this value, named as in YAML.

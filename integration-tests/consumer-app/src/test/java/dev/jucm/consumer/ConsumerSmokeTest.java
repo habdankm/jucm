@@ -23,11 +23,13 @@ class ConsumerSmokeTest {
     @Test
     @DisplayName("resources from the JUCM JAR are readable (version.properties)")
     void resourcesFromJucmJarAreReadable() {
+        // THE NUMBER IS NOT ASSERTED HERE (measured 1 XI 2026: bumping 1.6 -> 1.7 turned this guard red although nothing was broken - it was pinning a VALUE, while
+        // its subject is READABILITY: a `version.properties` missing from the JAR answers `unknown`). The shape is what a reader of this test needs.
         assertThat(Version.get())
             .as("the version is read from a resource; a resource missing from the JAR would give `unknown`")
             .isNotBlank()
             .isNotEqualTo("unknown")
-            .isEqualTo("1.0");
+            .matches("\\d+\\.\\d+");
     }
 
     @Test
@@ -42,7 +44,7 @@ class ConsumerSmokeTest {
         assertThat(patch.operation(ConfigPath.of("server.port")))
             .contains(new ConfigPatch.SetValue(ConfigInt.of(8080)));
         assertThat(ConsumerApp.describe(patch))
-            .contains("consumer: JUCM 1.0")
+            .contains("consumer: JUCM ")
             .contains("server.port=8080")
             .contains("server.tls=true")
             .as("display() of a collection shows the shape, not the size")

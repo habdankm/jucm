@@ -11,7 +11,9 @@
 
 allprojects {
     group = 'dev.jucm'
-    version = '1.6'
+    // 1.7: `!decrypt` - a sealed value that is openable AT THE READ, so its key can be `${vault_key}` from the same file (owner, 31 X 2026).
+    // The minor number grows because the closed set of `ConfigValue` grows with it (`ConfigSealed`).
+    version = '1.7'
 }
 
 subprojects {

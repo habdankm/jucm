@@ -14,7 +14,6 @@ dependencies {
     implementation project(':config-env')
     // THE VAULT IS A LAYER OF THE CONFIGURATION (owner, 21 X 2026), so the toolbox owns it: an application declares a `sensitive` field and
     // does not wire a store by hand.
-    implementation project(':config-secrets')
     implementation project(':config-picocli')
     // `api`, not `implementation`: `Configurator` is part of the toolbox API (the TUI extension
     // point), so an application must see it without declaring the TUI module separately.

@@ -256,9 +256,10 @@ class ConfigValueTest {
 
     @Test
     void closedSetHasNoOtherVariants() {
-        // Guard of the closed set: a new variant is a deliberate contract change — the two interpolation
-        // variants arrived last, so the count grew 9 -> 11.
-        assertThat(ConfigValue.class.getPermittedSubclasses()).hasSize(11);
+        // Guard of the closed set: a new variant is a deliberate contract change. The two interpolation variants
+        // took it 9 -> 11; `ConfigSealed` (the `!decrypt` value, opened at the read so its key can be `${vault_key}`)
+        // takes it to 12 - and that is why this test exists: a new shape has to be declared here, not slip in.
+        assertThat(ConfigValue.class.getPermittedSubclasses()).hasSize(12);
         assertThatNoException().isThrownBy(() -> ConfigType.fromYamlName("str"));
     }
 }

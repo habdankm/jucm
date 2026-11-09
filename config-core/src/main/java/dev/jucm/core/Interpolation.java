@@ -429,6 +429,10 @@ public final class Interpolation {
                 expression.symbolics().forEach(symbolic -> collect(symbolic, found));
             case ConfigSeq seq -> seq.elements().forEach(element -> collect(element, found));
             case ConfigMap map -> map.entries().values().forEach(element -> collect(element, found));
+            // A SEALED VALUE KEEPS ITS KEY TO ITSELF (owner, 31 X 2026): the key is resolved by the READ that opens the value, not by the resolver that walks
+            // references, so listing it here would be a second walk over the same text with a second answer.
+            case ConfigSealed ignored -> {
+            }
             case ConfigString ignored -> {
             }
             case ConfigInt ignored -> {
@@ -616,12 +620,48 @@ public final class Interpolation {
                 case ConfigExpression expression -> expression(expression, path);
                 case ConfigSeq seq -> sequence(seq, path);
                 case ConfigMap map -> mapping(map, path);
+                // A SEALED VALUE IS OPENED HERE (owner, 31 X 2026), and this is the ONE place it can be: every reader - `Config.get`, the pipeline, a cast - sees the
+                // value through this resolver, so handing the symbol over would put a `ConfigSealed` where a string is expected (measured: `cast-failed: expected type
+                // str, but the incoming value has type str [value sealed[48 chars]]`). The key's `${…}` is resolved against THIS snapshot, which is why it cannot
+                // happen while the YAML is parsed.
+                case ConfigSealed sealed -> opened(sealed, path);
                 case ConfigInt ignored -> new Outcome.Value(value);
                 case ConfigFloat ignored -> new Outcome.Value(value);
                 case ConfigBool ignored -> new Outcome.Value(value);
                 case ConfigTimestamp ignored -> new Outcome.Value(value);
                 case ConfigBinary ignored -> new Outcome.Value(value);
             };
+        }
+
+        /**
+         * OPENS A SEALED VALUE against this snapshot: the key is a literal or one `${…}` reference, and the value is only then decrypted.
+         *
+         * <p>A wrong key, a truncated token or a key naming an address that does not exist each answer with the sentence, never with the value.
+         */
+        private Outcome opened(ConfigSealed sealed, ConfigPath path) {
+            String written = sealed.key();
+            String key = written;
+            if (written.contains("${")) {
+                ConfigResult<ConfigValue> parsed = parse(path, written, sourceOf(path));
+                if (parsed instanceof ConfigResult.ErrorResult<ConfigValue> bad) {
+                    return new Outcome.Problem(bad.error());
+                }
+                ConfigValue symbolic = ((ConfigResult.ValueResult<ConfigValue>) parsed).value();
+                if (!(symbolic instanceof ConfigReference reference)) {
+                    return new Outcome.Problem(new ConfigError.ParseFailed(sourceOf(path),
+                        "the `!decrypt` key `" + written + "` is not a single ${reference}: a key assembled from several values has no one place a person can check"));
+                }
+                Outcome resolved = target(reference, path, true);
+                if (!(resolved instanceof Outcome.Value found)) {
+                    return resolved;
+                }
+                key = found.value() instanceof ConfigString text ? text.value() : found.value().display();
+            }
+            try {
+                return new Outcome.Value(ConfigString.of(Sealed.open(sealed.ciphertext(), key)));
+            } catch (IllegalArgumentException refused) {
+                return new Outcome.Problem(new ConfigError.ParseFailed(sourceOf(path), refused.getMessage()));
+            }
         }
 
         private Outcome fromText(ConfigString text, ConfigPath path) {

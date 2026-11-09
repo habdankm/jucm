@@ -36,11 +36,11 @@ repositories {
 }
 
 dependencies {
-    implementation 'dev.jucm:config-core:1.0'
+    implementation "dev.jucm:config-core:${rootProject.version}"
     // ONE dependency on our libraries: the toolbox collects the adapters (yaml/env/picocli/casciian).
     // The application does not know picocli or casciian and does not have to — that is the whole
     // difference.
-    implementation 'dev.jucm:config-toolbox:1.0'
+    implementation "dev.jucm:config-toolbox:${rootProject.version}"
     // casciian is declared by US, because we write our OWN widget (`.tui(view -> ...)`): the types
     // `TLabel`/`TWidget` have to be on our classpath. That is the deliberate cost of extending the
     // TUI — and the only reason for this line.
@@ -76,7 +76,7 @@ graalvmNative {
             javaLauncher = javaToolchains.launcherFor {
                 languageVersion = JavaLanguageVersion.of(25)
                 if (graalvmGiven) {
-                    vendor = JvmVendorSpec.GRAAL_VM
+                    vendor = JvmVendorSpec.ORACLE //GRAAL_VM
                 }
             }
             imageName = 'uri-app'

@@ -16,8 +16,7 @@ include 'config-core',
         'config-env',
         'config-picocli',
         'config-casciian',
-        'config-toolbox',
-        'config-secrets'
+        'config-toolbox'
 
 // Consumer application for integration tests — a separate module that uses JUCM as an EXTERNAL
 // JAR from mavenLocal, not as a `project(...)` dependency.

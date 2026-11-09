@@ -24,8 +24,10 @@ dependencies {
     // The registration library, from its own repository. It is NOT published anywhere else, and that is on purpose:
     // a library offered to anyone is a promise, and this one is still being decided.
     implementation 'dev.jusl:service-lib:1.0'
-    implementation 'dev.jucm:config-core:1.0'
-    implementation 'dev.jucm:config-toolbox:1.0'
+    // implementation 'dev.jucm:config-core:1.0'
+    // implementation 'dev.jucm:config-toolbox:1.0'
+    implementation "dev.jucm:config-core:${rootProject.version}"
+    implementation "dev.jucm:config-toolbox:${rootProject.version}"
 }
 
 def graalvmGiven = providers.gradleProperty('org.gradle.java.installations.paths').isPresent()
@@ -68,3 +70,8 @@ tasks.register('verifyJuslPublished') {
 
 tasks.withType(JavaCompile).configureEach { dependsOn 'verifyJuslPublished' }
 tasks.named('nativeCompile') { dependsOn 'verifyJuslPublished' }
+
+tasks.named('compileJava') {
+    dependsOn ':config-core:publishToMavenLocal'
+    dependsOn ':config-toolbox:publishToMavenLocal'
+}

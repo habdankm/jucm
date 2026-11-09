@@ -126,6 +126,38 @@ public final class YamlDocument {
         return this;
     }
 
+    /**
+     * Sets a SEALED value at that address: a mapping tagged `!decrypt` with `ciphertext` and `key`.
+     *
+     * <p>WHY THE WRITER NEEDS IT (owner, 31 X 2026: „popraw init, żeby key i hasła materializował w maswerk.yaml dla core”): a credential is written where its
+     * setting lives, as the tagged mapping the reader already understands - so `init` can store a password without a vault file and without a second format.
+     *
+     * @param ciphertext `base64(nonce || ciphertext || tag)` from {@code dev.jucm.core.Sealed}
+     * @param key        the key text, or a `${…}` reference to it (e.g. `${vault_key}`)
+     * @param path       the address of the setting
+     * @return this document
+     */
+    public YamlDocument putSealed(String ciphertext, String key, String... path) {
+        if (path.length == 0) {
+            throw new IllegalArgumentException("an address is required: a sealed value at the root would replace the document");
+        }
+        MappingNode parent = mappingAt(path, path.length - 1, true);
+        String name = path[path.length - 1];
+        java.util.ArrayList<NodeTuple> members = new java.util.ArrayList<>();
+        members.add(new NodeTuple(new ScalarNode(Tag.STR, "ciphertext", ScalarStyle.PLAIN),
+            new ScalarNode(Tag.STR, ciphertext, ScalarStyle.DOUBLE_QUOTED)));
+        members.add(new NodeTuple(new ScalarNode(Tag.STR, "key", ScalarStyle.PLAIN),
+            new ScalarNode(Tag.STR, key, ScalarStyle.PLAIN)));
+        Node valueNode = new MappingNode(new Tag("!decrypt"), members, FlowStyle.BLOCK);
+        NodeTuple existing = tuple(parent, name);
+        if (existing == null) {
+            parent.getValue().add(new NodeTuple(new ScalarNode(Tag.STR, name, ScalarStyle.PLAIN), valueNode));
+        } else {
+            replaceValue(parent, existing, valueNode);
+        }
+        return this;
+    }
+
     /** Ensures an empty mapping exists at that address (the parent of an entry about to be added). */
     public YamlDocument putMapping(String... path) {
         mappingAt(path, path.length, true);

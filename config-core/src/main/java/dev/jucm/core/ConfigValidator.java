@@ -235,8 +235,15 @@ public final class ConfigValidator {
             // Verdicts instead of re-validation: the value is already typed, and the problems were recorded
             // where they arose - in the step that stopped the value.
             // A SECRET MUST NOT COME FROM A SETTINGS FILE (owner, 21 X 2026): the mark on the declaration says the value is a password, and a password in
-            // `maswerk.yaml` is a password in every copy, backup and commit of that file. The vault and the environment are the ways in.
-            if (field.isSensitive() && entry.source().layer() == Layer.YAML) {
+            // `maswerk.yaml` is a password in every copy, backup and commit of that file. A SEALED value (`!decrypt`) is the way a file may carry one, and the
+            // ENVIRONMENT is the other (owner, 31 X 2026: the vault file is gone, the tag replaced it).
+            // THE SYMBOLIC VALUE, FROM THE ORIGINAL CONFIG (measured 1 XI 2026: the pipeline RESOLVES values, so `entry.value()` here is the OPENED string and a
+            // sealed value was indistinguishable from a plaintext one). `config`, not `resolved`, is what still carries the `ConfigSealed`.
+            boolean sealedInFile = config.entry(field.path())
+                .map(Config.Entry::value)
+                .filter(ConfigSealed.class::isInstance)
+                .isPresent();
+            if (field.isSensitive() && entry.source().layer() == Layer.YAML && !sealedInFile) {
                 // AND THE VALUE IS NOT CARRIED into the error: `actual` is what a renderer prints, so it holds a redaction - otherwise the check
                 // against leaks would be the thing that leaks.
                 errors.add(new ConfigError.ValidationFailed(field.path(),
